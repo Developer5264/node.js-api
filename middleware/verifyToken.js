@@ -1,6 +1,5 @@
 const jwt = require('jsonwebtoken');
-
-const auth = async (req, res, next) => {
+const verifyToken = async (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     console.log('Received token:', token);  // Debug log
 
@@ -9,7 +8,7 @@ const auth = async (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, 'yourSecretKey'); // Ensure JWT_SECRET matches the one used during token generation
+        const decoded = jwt.verify(token, JWT_SECRET); // Ensure JWT_SECRET matches the one used during token generation
         req.user = decoded.userId; // Attach the user ID to the request
         console.log('Decoded user ID:', req.user);  // Debug log
         next();
@@ -20,4 +19,4 @@ const auth = async (req, res, next) => {
 };
 
 
-module.exports = auth;
+module.exports = verifyToken;

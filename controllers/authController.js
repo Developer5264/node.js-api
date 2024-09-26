@@ -73,15 +73,17 @@ exports.login = async (req, res) => {
 
     try {
         // Find user by email
-        const user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ msg: 'Invalid credentials' });
+        const user = await User.findOne({ email }); console.log('Searching for user with email:', email);
+        console.log('User found:', user);
+        if (!user) return res.status(400).json({ msg: 'Invalid email' });
 
         // Compare entered password with the stored hashed password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ msg: 'Invalid credentials' });
 
         // Generate token
-        const token = generateToken(user._id);
+        const token = generateToken(user.id);
+        console.log('token:', token);
 
         // Return the user details along with the token
         res.json({
@@ -105,6 +107,7 @@ exports.getUserProfile = async (req, res) => {
 
         // Send back user details
         res.status(200).json({
+            _id: user._id,
             username: user.username,
             email: user.email,
             profileImage: user.profileImage,

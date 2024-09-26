@@ -1,6 +1,6 @@
 const express = require('express');
 const { register, login, updateUserProfile, getUserProfile } = require('../controllers/authController');
-const auth = require('../middleware/auth');
+const verifyToken = require('../middleware/verifyToken');
 const multer = require('multer');
 const router = express.Router();
 
@@ -35,7 +35,7 @@ const upload = multer({
 router.post('/register', upload.single('profileImage'), register);  // Handling image upload during registration
 router.post('/login', login);
 router.put('/update-profile', upload.single('profileImage'), updateUserProfile);
-router.get('/profile', auth, getUserProfile);
+router.get('/profile', verifyToken, getUserProfile);
 
 
 
