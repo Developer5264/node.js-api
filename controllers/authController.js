@@ -4,7 +4,14 @@ const User = require('../models/User');
 const generateToken = require('../middleware/generateToken');
 const path = require('path');
 const fs = require('fs');
+const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
+const express = require('express');
+const client = new OAuth2Client('314831392071-cso4l5ffmo0jpanta3o0lvrlkdorhhg7.apps.googleusercontent.com');
+const bodyParser = require('body-parser');
+const app = express();
 
+app.use(bodyParser.json());
 // User registration
 exports.register = async (req, res) => {
     const { username, email, password } = req.body;
@@ -114,5 +121,37 @@ exports.getUserProfile = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ msg: 'Server error' });
+    }
+};
+
+// Get User Profile
+exports.googleSignin = async (req, res) => {
+    const { idToken } = req.body;
+    console.log('Request Body:', req.body);
+    console.log('Received ID Token:', idToken);
+
+    try {
+        const ticket = await client.verifyIdToken({
+            idToken: idToken,
+            audience: process.env.OAuth2Client,
+        });
+
+        console.log('Verification successful, ticket:', ticket);
+        const payload = ticket.getPayload();
+        console.log('Payload:', payload);
+
+        const userId = payload['sub'];
+        const email = payload['email'];
+        const name = payload['name'];
+        console.log('User Info:', { userId, email, name });
+
+        // Generate JWT token
+        const token = jwt.sign({ userId, email, name }, process.env.JWT_SECRET, { expiresIn: '8h' }); // Token expires in 1 hour
+
+        // Send the token back to the client
+        res.status(200).send({ userId, email, name, token });
+    } catch (error) {
+        console.error('Error verifying token:', error);
+        res.status(400).send({ error: 'Invalid token', details: error.message });
     }
 };
