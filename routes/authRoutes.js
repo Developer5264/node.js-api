@@ -1,5 +1,5 @@
 const express = require('express');
-const { register, login, updateUserProfile, getUserProfile, googleSignin } = require('../controllers/authController');
+const { register, login, updateUserProfile, getUserProfile, googleSignin, uploadPost, getAllPosts, searchUser } = require('../controllers/authController');
 const verifyToken = require('../middleware/verifyToken');
 const multer = require('multer');
 const router = express.Router();
@@ -37,6 +37,9 @@ router.post('/login', login);
 router.put('/update-profile', upload.single('profileImage'), updateUserProfile);
 router.get('/profile', verifyToken, getUserProfile);
 router.post('/auth/google-signin', googleSignin);
+router.post('/upload-post', upload.single('image'), uploadPost);
+router.get('/get-all-posts', getAllPosts);
+router.get('/search-user', searchUser);
 
 
 

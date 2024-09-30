@@ -8,7 +8,7 @@ const verifyToken = async (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, JWT_SECRET); // Ensure JWT_SECRET matches the one used during token generation
+        const decoded = jwt.verify(token, process.env.JWT_SECRET); // Ensure JWT_SECRET matches the one used during token generation
         req.user = decoded.userId; // Attach the user ID to the request
         console.log('Decoded user ID:', req.user);  // Debug log
         next();

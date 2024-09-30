@@ -1,5 +1,6 @@
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
+const Post = require('../models/Post');
 const User = require('../models/User');
 const generateToken = require('../middleware/generateToken');
 const path = require('path');
@@ -10,6 +11,8 @@ const express = require('express');
 const client = new OAuth2Client('314831392071-cso4l5ffmo0jpanta3o0lvrlkdorhhg7.apps.googleusercontent.com');
 const bodyParser = require('body-parser');
 const app = express();
+const axios = require('axios'); // Use axios to download the image
+const { v4: uuidv4 } = require('uuid'); // Use this to generate unique filenames
 
 app.use(bodyParser.json());
 // User registration
@@ -48,21 +51,32 @@ exports.register = async (req, res) => {
 
 // Update user profile
 exports.updateUserProfile = async (req, res) => {
-    const { userId } = req.body; // Extract userId from request
+    const { userId, email, password, username } = req.body; // Extract necessary fields from request
 
     try {
-
         // Check if a new image file is uploaded
         let profileImageUrl = null;
         if (req.file) {
-            profileImageUrl = req.file.path;
+            // Normalize the file path for URL format (with forward slashes)
+            profileImageUrl = `/uploads/${req.file.filename}`;  // Ensure forward slashes
+        }
+
+        // Create an object to hold updated fields
+        const updateFields = {
+            username: username,
+            email: email,
+            profileImage: profileImageUrl,  // Store the normalized file URL
+        };
+
+        // If password is provided, hash it before updating
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(password, salt);
+            updateFields.password = hashedPassword;
         }
 
         // Update the user profile in the database
-        const updatedUser = await User.findByIdAndUpdate(userId, {
-            username: req.body.username,
-            profileImage: profileImageUrl
-        }, { new: true });
+        const updatedUser = await User.findByIdAndUpdate(userId, updateFields, { new: true });
 
         if (!updatedUser) {
             return res.status(404).json({ message: 'User not found' });
@@ -73,6 +87,7 @@ exports.updateUserProfile = async (req, res) => {
         res.status(500).json({ message: 'Server error', error });
     }
 };
+
 
 // User login
 exports.login = async (req, res) => {
@@ -109,6 +124,7 @@ exports.getUserProfile = async (req, res) => {
         const user = await User.findById(req.user).select('-password'); // Exclude password from the response
 
         if (!user) {
+            console.log("Here User not found");
             return res.status(404).json({ msg: 'User not found' });
         }
 
@@ -124,7 +140,6 @@ exports.getUserProfile = async (req, res) => {
     }
 };
 
-// Get User Profile
 exports.googleSignin = async (req, res) => {
     const { idToken } = req.body;
     console.log('Request Body:', req.body);
@@ -142,16 +157,93 @@ exports.googleSignin = async (req, res) => {
 
         const userId = payload['sub'];
         const email = payload['email'];
-        const name = payload['name'];
-        console.log('User Info:', { userId, email, name });
+        const username = payload['name'];
+        const pictureUrl = payload['picture']; // URL of the user's Google profile picture
+        const password = "null";
+        console.log('User Info:', { userId, email, username, pictureUrl });
+
+        // Check if the user already exists in the database
+        let user = await User.findOne({ email });
+
+        // If the user does not exist, create a new one
+        if (!user) {
+            console.log('User does not exist, creating new user.');
+
+            // Download the Google profile image
+            const imageResponse = await axios.get(pictureUrl, {
+                responseType: 'arraybuffer'
+            });
+
+            // Generate a unique filename and save the image locally
+            const imageFilename = `${uuidv4()}.jpg`;
+            const imagePath = path.join(__dirname, '../uploads', imageFilename);
+
+            // Write the downloaded image to the file system
+            fs.writeFileSync(imagePath, imageResponse.data);
+
+            // Create new user with local image path
+            user = new User({
+                username,
+                email,
+                password,
+                profileImage: `/uploads/${imageFilename}` // Save the local path to the database
+            });
+
+            await user.save();
+        } else {
+            console.log('User already exists, skipping creation.');
+        }
 
         // Generate JWT token
-        const token = jwt.sign({ userId, email, name }, process.env.JWT_SECRET, { expiresIn: '8h' }); // Token expires in 1 hour
+        const token = generateToken(user.id);
 
         // Send the token back to the client
-        res.status(200).send({ userId, email, name, token });
+        res.status(200).json({ token });
     } catch (error) {
         console.error('Error verifying token:', error);
         res.status(400).send({ error: 'Invalid token', details: error.message });
+    }
+};
+// Get User Profile
+exports.uploadPost = (req, res) => {
+    const post = new Post({
+        userId: req.body.userId,
+        imageUrl: `/uploads/${req.file.filename}`,
+        caption: req.body.caption,
+    });
+
+    post.save()
+        .then(() => res.status(201).json({ message: 'Post created successfully' }))
+        .catch(err => res.status(500).json({ error: err }));
+};
+
+
+// Get User Profile
+exports.getAllPosts = async (req, res) => {
+    try {
+        const posts = await Post.find().sort({ createdAt: -1 }); // Sort by latest posts
+        res.status(200).json(posts);
+    } catch (err) {
+        res.status(500).json({ error: err });
+    }
+};
+
+// Get User Profile
+exports.searchUser = async (req, res) => {
+    const { username } = req.query;
+
+    if (!username) {
+        return res.status(400).json({ message: 'Username query is required' });
+    }
+
+    try {
+        // Search for users whose username contains the search term (case-insensitive)
+        const users = await User.find({
+            username: { $regex: username, $options: 'i' } // 'i' makes it case-insensitive
+        }).select('username profileImage'); // Select only username and profileImage fields
+
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ message: 'Server error', error: err.message });
     }
 };
